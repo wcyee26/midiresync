@@ -19,8 +19,16 @@ MidiFile oMidifile;
 float sameBeatMarginTime = 0.001;
 // The minimum beat key number
 int MIN_BEAT_KEY_NUMBER = 60;
+// The type of a track
+enum class ETrackType
+{
+    Beater2
+    , Beater1
+    , Beater0
+    , Beater0DTEarly
+};
 
-string iMidifilename = "The White Stripes Fell In Love With A Girl Cover (NEW).mid";
+string iMidifilename = "QOTSA No One Knows Cover.mid";
 //string iMidifilename = "Test Drum.mid";
 //string iMidifilename = "Slipknot Psychosocial Cover.mid";
 
@@ -110,7 +118,9 @@ int main(int argc, char** argv) {
             maxAnimTimeLengths[trackIndex] = 1.0;
             beforeHitAnimDTs[trackIndex] = 0.367;
         }
-         
+                
+        // The type of a track
+        ETrackType trackType = ETrackType::Beater1;
         // Number of beater uses for hitting the drum
         int beaterCount = 1;
         // The maximum animation time for one beat
@@ -132,210 +142,225 @@ int main(int argc, char** argv) {
         float delayedBOnTime = 0.0;
         float delayedBOffTime = 0.0;
 
-        cout << "Track: " << trackIndex << endl;
-
         for (int eventIndex = 0; eventIndex < iMidifile[trackIndex].getEventCount(); eventIndex++) {
         //for (int eventIndex = 0; eventIndex < 201; eventIndex++) {
             // If the event is not a note
             if (!iMidifile[trackIndex][eventIndex].isNote()) {
-                // Search for the number of beater in track name
-                // Then assign it to varialbe 'beaterCount'
-                if (iMidifile[trackIndex][eventIndex].isTrackName()) {
-                    string content = iMidifile[trackIndex][eventIndex].getMetaContent();
-                    size_t beaterCountSeperatorPos = content.find(':');
-                    if (beaterCountSeperatorPos != string::npos)
-                        beaterCount = stoi(content.substr(0, beaterCountSeperatorPos));
-                        //cout << content << "beater count: " << beaterCount << endl;
-                }
-                // If beaterCount is 0 means the track is other than beat track. Eg. Character Anim, Lighting, etc.
-                // So, copy and paste the track and break the event loop
-                if (beaterCount == 0) {
-                    oMidifile[trackIndex] = iMidifile[trackIndex];
-                    break;
-                }
                 // Get the tempo seconds
                 if (iMidifile[trackIndex][eventIndex].tick == 0
                     && iMidifile[trackIndex][eventIndex].getTempoSeconds() > 0) {
                     tempoSeconds = iMidifile[trackIndex][eventIndex].getTempoSeconds();
                     cout << "Tempo Seconds: " << tempoSeconds << endl;
                 }
+                // Search for the track code in track name
+                // Then assign it as a ETrackType
+                if (iMidifile[trackIndex][eventIndex].isTrackName()) {
+                    string content = iMidifile[trackIndex][eventIndex].getMetaContent();
+                    cout << "Track: " << trackIndex;
+                    cout << " (" << content << ")" << endl;
+
+                    size_t beaterCountSeperatorPos = content.find(':');
+                    if (beaterCountSeperatorPos != string::npos) {
+                        string trackCode = content.substr(0, beaterCountSeperatorPos);
+                        beaterCount = stoi(trackCode.substr(0, 1));
+                        if (trackCode == "2") {
+                            trackType = ETrackType::Beater2;
+                        }
+                        else if (trackCode == "0") {
+                            trackType = ETrackType::Beater0;
+                        }
+                        else if (trackCode == "0a") {
+                            trackType = ETrackType::Beater0DTEarly;
+                        }
+                    }
+                }
                 oMidifile.addEvent(iMidifile[trackIndex][eventIndex]);
                 continue;
             }
 
-            if (iMidifile[trackIndex][eventIndex].isNoteOn()) {
-                // If the previous beat is the SAME
-                // then, SKIP ALL
-                if (isPreviousSameBeat(iMidifile[trackIndex][eventIndex], iMidifile[trackIndex][eventIndex - 1])) 
-                {
-                    continue;
-                }
-                // The beat hitting time
-                float eventTime = iMidifile[trackIndex][eventIndex].seconds;
+            // If TrackType::Beater0 means the track is other than beat track. Eg. Character Anim, Lighting, etc.
+            // So, copy and paste the track and break the event loop
+            if (trackType == ETrackType::Beater0) {
+                oMidifile[trackIndex] = iMidifile[trackIndex];
+                break;
+            }
+            else if (trackType == ETrackType::Beater0DTEarly) {
 
-                float totalAvailableHitAnimDT = 0.0;
-                float availableBeforeHitAnimDT = 0.0;
-                float availableAfterHitAnimDT = 0.0;
+            }
+            else if (trackType == ETrackType::Beater2 || trackType == ETrackType::Beater1) {
+                if (iMidifile[trackIndex][eventIndex].isNoteOn()) {
+                    // If the previous beat is the SAME
+                    // then, SKIP ALL
+                    if (isPreviousSameBeat(iMidifile[trackIndex][eventIndex], iMidifile[trackIndex][eventIndex - 1]))
+                    {
+                        continue;
+                    }
+                    // The beat hitting time
+                    float eventTime = iMidifile[trackIndex][eventIndex].seconds;
 
-                // The standard maximum time before the end of the beat
-                cTime = iMidifile[trackIndex][eventIndex + 2].seconds;
-                // If the next beat is SAME, 
-                // Then the max. time before the end of the beat should be the next 4th event
-                if (isNextSameBeat(iMidifile[trackIndex][eventIndex], iMidifile[trackIndex][eventIndex + 1])) {
-                    cTime = iMidifile[trackIndex][eventIndex + 4].seconds;
-                }
-                // If beaterCount is 1 OR the next beat is SAME, reduce the maximum time before the end of beat
-                // and enter the FIRST LAYER of beat duration calculation
-                if (beaterCount == 1 
-                    || isNextSameBeat(iMidifile[trackIndex][eventIndex], iMidifile[trackIndex][eventIndex + 1])
-                    ) {
-                    // Set the available hit anim delta time to ONLY between two ON notes
-                    totalAvailableHitAnimDT = cTime - eventTime;
-                    availableAfterHitAnimDT = (totalAvailableHitAnimDT / maxAnimTimeLength) * afterHitAnimDT;
-                    cTime = eventTime + availableAfterHitAnimDT;
-                }
+                    float totalAvailableHitAnimDT = 0.0;
+                    float availableBeforeHitAnimDT = 0.0;
+                    float availableAfterHitAnimDT = 0.0;
 
-                // SECOND LAYER of beat duration calculation
-                // To analyse and optimize each beat more precisely
-                availableBeforeHitAnimDT = eventTime - aTime;
-                availableAfterHitAnimDT = cTime - eventTime;
-                totalAvailableHitAnimDT = availableBeforeHitAnimDT + availableAfterHitAnimDT;
-                // Comparing the available anim time length TO maximum anim time length
-                float availableAnimTimeLengthRatio = totalAvailableHitAnimDT / maxAnimTimeLength;
-                // If the available anim time length exceeds the maximum, override it to the maximum
-                if (availableAnimTimeLengthRatio >= 1.0)
-                    availableAnimTimeLengthRatio = 1.0;
+                    // The standard maximum time before the end of the beat
+                    cTime = iMidifile[trackIndex][eventIndex + 2].seconds;
+                    // If the next beat is SAME, 
+                    // Then the max. time before the end of the beat should be the next 4th event
+                    if (isNextSameBeat(iMidifile[trackIndex][eventIndex], iMidifile[trackIndex][eventIndex + 1])) {
+                        cTime = iMidifile[trackIndex][eventIndex + 4].seconds;
+                    }
+                    // If beaterCount is 1 OR the next beat is SAME, reduce the maximum time before the end of beat
+                    // and enter the FIRST LAYER of beat duration calculation
+                    if (beaterCount == 1
+                        || isNextSameBeat(iMidifile[trackIndex][eventIndex], iMidifile[trackIndex][eventIndex + 1])
+                        ) {
+                        // Set the available hit anim delta time to ONLY between two ON notes
+                        totalAvailableHitAnimDT = cTime - eventTime;
+                        availableAfterHitAnimDT = (totalAvailableHitAnimDT / maxAnimTimeLength) * afterHitAnimDT;
+                        cTime = eventTime + availableAfterHitAnimDT;
+                    }
 
-                float desiredBeforeHitAnimDT = availableAnimTimeLengthRatio * beforeHitAnimDT;
-                float desiredAfterHitAnimDT = availableAnimTimeLengthRatio * afterHitAnimDT;
+                    // SECOND LAYER of beat duration calculation
+                    // To analyse and optimize each beat more precisely
+                    availableBeforeHitAnimDT = eventTime - aTime;
+                    availableAfterHitAnimDT = cTime - eventTime;
+                    totalAvailableHitAnimDT = availableBeforeHitAnimDT + availableAfterHitAnimDT;
+                    // Comparing the available anim time length TO maximum anim time length
+                    float availableAnimTimeLengthRatio = totalAvailableHitAnimDT / maxAnimTimeLength;
+                    // If the available anim time length exceeds the maximum, override it to the maximum
+                    if (availableAnimTimeLengthRatio >= 1.0)
+                        availableAnimTimeLengthRatio = 1.0;
 
-                float allowedBeforeHitAnimDT = desiredBeforeHitAnimDT;
-                float allowedAfterHitAnimDT = desiredAfterHitAnimDT;
+                    float desiredBeforeHitAnimDT = availableAnimTimeLengthRatio * beforeHitAnimDT;
+                    float desiredAfterHitAnimDT = availableAnimTimeLengthRatio * afterHitAnimDT;
 
-                if (desiredAfterHitAnimDT > availableAfterHitAnimDT) {
-                    allowedAfterHitAnimDT = availableAfterHitAnimDT;
-                    allowedBeforeHitAnimDT = animTimeLengthRatio * allowedAfterHitAnimDT;
-                }
-                if (allowedBeforeHitAnimDT > availableBeforeHitAnimDT) {
-                    allowedBeforeHitAnimDT = availableBeforeHitAnimDT;
-                    allowedAfterHitAnimDT = allowedBeforeHitAnimDT / animTimeLengthRatio;
-                }
+                    float allowedBeforeHitAnimDT = desiredBeforeHitAnimDT;
+                    float allowedAfterHitAnimDT = desiredAfterHitAnimDT;
 
-                int keyNumber = iMidifile[trackIndex][eventIndex].getKeyNumber();
-                int velocity = iMidifile[trackIndex][eventIndex].getVelocity();
-                bOnTime = eventTime - allowedBeforeHitAnimDT;
-                // If the current bOnTime is less than prev bOffTime
-                // Means notes are overlapping, change the key number
-                if (bOnTime < bOffTime) {
-                    int prevKeyNumber = oMidifile[trackIndex][eventIndex - 2].getKeyNumber();
-                    if (isBeatKey(oMidifile[trackIndex][eventIndex - 2])
-                        && (abs(keyNumber - prevKeyNumber) % 2 == 0))
-                        keyNumber = keyNumber + 1;
-                }
-                bOffTime = eventTime + allowedAfterHitAnimDT;
-                float bAnimTimeLength = bOffTime - bOnTime;
+                    if (desiredAfterHitAnimDT > availableAfterHitAnimDT) {
+                        allowedAfterHitAnimDT = availableAfterHitAnimDT;
+                        allowedBeforeHitAnimDT = animTimeLengthRatio * allowedAfterHitAnimDT;
+                    }
+                    if (allowedBeforeHitAnimDT > availableBeforeHitAnimDT) {
+                        allowedBeforeHitAnimDT = availableBeforeHitAnimDT;
+                        allowedAfterHitAnimDT = allowedBeforeHitAnimDT / animTimeLengthRatio;
+                    }
 
-                // ADJUST each beat to one event earlier, according to the previous note
-                adjustedBOnTime = bOnTime - bAnimTimeLength;
-                // If adjustedBOnTime less than prev adjustedBOffTime and beater count is only 1
-                // Readjust adjustedBOnTime to just after prev adjustedBOffTime and reduce bAnimTimeLength
-                if (adjustedBOnTime < adjustedBOffTime && beaterCount == 1) {
-                    float earlierDuration = adjustedBOffTime - adjustedBOnTime;
+                    int keyNumber = iMidifile[trackIndex][eventIndex].getKeyNumber();
+                    int velocity = iMidifile[trackIndex][eventIndex].getVelocity();
+                    bOnTime = eventTime - allowedBeforeHitAnimDT;
+                    // If the current bOnTime is less than prev bOffTime
+                    // Means notes are overlapping, change the key number
+                    if (bOnTime < bOffTime) {
+                        int prevKeyNumber = oMidifile[trackIndex][eventIndex - 2].getKeyNumber();
+                        if (isBeatKey(oMidifile[trackIndex][eventIndex - 2])
+                            && (abs(keyNumber - prevKeyNumber) % 2 == 0))
+                            keyNumber = keyNumber + 1;
+                    }
+                    bOffTime = eventTime + allowedAfterHitAnimDT;
+                    float bAnimTimeLength = bOffTime - bOnTime;
 
-                    adjustedBOnTime = adjustedBOffTime;
-                    bAnimTimeLength = bAnimTimeLength - earlierDuration;
+                    // ADJUST each beat to one event earlier, according to the previous note
+                    adjustedBOnTime = bOnTime - bAnimTimeLength;
+                    // If adjustedBOnTime less than prev adjustedBOffTime and beater count is only 1
+                    // Readjust adjustedBOnTime to just after prev adjustedBOffTime and reduce bAnimTimeLength
+                    if (adjustedBOnTime < adjustedBOffTime && beaterCount == 1) {
+                        float earlierDuration = adjustedBOffTime - adjustedBOnTime;
 
-                }
-                adjustedBOffTime = adjustedBOnTime + bAnimTimeLength;
+                        adjustedBOnTime = adjustedBOffTime;
+                        bAnimTimeLength = bAnimTimeLength - earlierDuration;
 
-                //cout << "a time: " << aTime << " event time: " << eventTime << " c time: " << cTime;
-                ///*cout << " before: " << availableBeforeHitAnimDT << " after: " << availableAfterHitAnimDT;
-                //cout << " ratio: " << availableAnimTimeLengthRatio;
-                //cout << " deB: " << desiredBeforeHitAnimDT << " deA: " << desiredAfterHitAnimDT;*/
-                ////cout << " adjustedBOnTime: " << adjustedBOnTime << " adjustedBOffTime: " << adjustedBOffTime;
-                ////cout << " anim time: " << adjustedBOffTime - adjustedBOnTime;
-                //cout << " anim time: " << bAnimTimeLength;
-                //cout << " key: " << keyNumber;
-                //cout << endl;
+                    }
+                    adjustedBOffTime = adjustedBOnTime + bAnimTimeLength;
 
-                // If the previous ON note is a SIGNATURE KEY, modify the time to its animation length
-                if (isSignatureKey(iMidifile[trackIndex][eventIndex - 2])) {
-                    // Time to allow animation to blend out
-                    float blendOutTime = 0.1;
-                    // The maximum allowed time for the signature anim to start before the next beat
-                    float allowedSignatureAnimOnTime = adjustedBOnTime - (2 * maxSignatureAnimTimeLengths[trackIndex])
-                                              - blendOutTime;
-                    float signatureAnimOnTime = allowedSignatureAnimOnTime;
-                    float signatureAnimOffTime = signatureAnimOnTime + maxSignatureAnimTimeLengths[trackIndex];
-                    oMidifile[trackIndex][eventIndex - 2].tick = iMidifile.getAbsoluteTickTime(signatureAnimOnTime);
-                    oMidifile[trackIndex][eventIndex - 1].tick = iMidifile.getAbsoluteTickTime(signatureAnimOffTime);
-                }
+                    //cout << "a time: " << aTime << " event time: " << eventTime << " c time: " << cTime;
+                    ///*cout << " before: " << availableBeforeHitAnimDT << " after: " << availableAfterHitAnimDT;
+                    //cout << " ratio: " << availableAnimTimeLengthRatio;
+                    //cout << " deB: " << desiredBeforeHitAnimDT << " deA: " << desiredAfterHitAnimDT;*/
+                    ////cout << " adjustedBOnTime: " << adjustedBOnTime << " adjustedBOffTime: " << adjustedBOffTime;
+                    ////cout << " anim time: " << adjustedBOffTime - adjustedBOnTime;
+                    //cout << " anim time: " << bAnimTimeLength;
+                    //cout << " key: " << keyNumber;
+                    //cout << endl;
 
-                // Add bTime ON event
-                vector<uchar> message;
-                message.push_back(iMidifile[trackIndex][eventIndex].getCommandByte());
-                message.push_back(keyNumber);
-                message.push_back(velocity);
-                oMidifile.addEvent(trackIndex
-                    , iMidifile.getAbsoluteTickTime(adjustedBOnTime)
-                    //, iMidifile.getAbsoluteTickTime(bOnTime)
-                    , message);
+                    // If the previous ON note is a SIGNATURE KEY, modify the time to its animation length
+                    if (isSignatureKey(iMidifile[trackIndex][eventIndex - 2])) {
+                        // Time to allow animation to blend out
+                        float blendOutTime = 0.1;
+                        // The maximum allowed time for the signature anim to start before the next beat
+                        float allowedSignatureAnimOnTime = adjustedBOnTime - (2 * maxSignatureAnimTimeLengths[trackIndex])
+                            - blendOutTime;
+                        float signatureAnimOnTime = allowedSignatureAnimOnTime;
+                        float signatureAnimOffTime = signatureAnimOnTime + maxSignatureAnimTimeLengths[trackIndex];
+                        oMidifile[trackIndex][eventIndex - 2].tick = iMidifile.getAbsoluteTickTime(signatureAnimOnTime);
+                        oMidifile[trackIndex][eventIndex - 1].tick = iMidifile.getAbsoluteTickTime(signatureAnimOffTime);
+                    }
 
-                // Add another bTime ON event for same beat
-                if (isNextSameBeat(iMidifile[trackIndex][eventIndex], iMidifile[trackIndex][eventIndex + 1])) {
-                    message.clear();
-                    message.push_back(iMidifile[trackIndex][eventIndex + 1].getCommandByte());
-                    message.push_back(iMidifile[trackIndex][eventIndex + 1].getKeyNumber());
-                    message.push_back(iMidifile[trackIndex][eventIndex + 1].getVelocity());
+                    // Add bTime ON event
+                    vector<uchar> message;
+                    message.push_back(iMidifile[trackIndex][eventIndex].getCommandByte());
+                    message.push_back(keyNumber);
+                    message.push_back(velocity);
                     oMidifile.addEvent(trackIndex
                         , iMidifile.getAbsoluteTickTime(adjustedBOnTime)
-                        //, iMidifile.getAbsoluteTickTime(bOffTime)
+                        //, iMidifile.getAbsoluteTickTime(bOnTime)
                         , message);
-                }
 
-                // Add bTime OFF event
-                message.clear();
-                message.push_back(iMidifile[trackIndex][eventIndex + 1].getCommandByte());
-                message.push_back(keyNumber);
-                message.push_back(velocity); 
-                // If the next beat is the SAME, override the message,
-                // the bTime OFF event should be based on the next 2nd event
-                if (isNextSameBeat(iMidifile[trackIndex][eventIndex], iMidifile[trackIndex][eventIndex + 1])) {
-                    message.clear();
-                    message.push_back(iMidifile[trackIndex][eventIndex + 2].getCommandByte());
-                    message.push_back(iMidifile[trackIndex][eventIndex + 2].getKeyNumber());
-                    message.push_back(iMidifile[trackIndex][eventIndex + 2].getVelocity());
-                }
-                oMidifile.addEvent(trackIndex
-                    , iMidifile.getAbsoluteTickTime(adjustedBOffTime)
-                    //, iMidifile.getAbsoluteTickTime(bOffTime)
-                    , message);
+                    // Add another bTime ON event for same beat
+                    if (isNextSameBeat(iMidifile[trackIndex][eventIndex], iMidifile[trackIndex][eventIndex + 1])) {
+                        message.clear();
+                        message.push_back(iMidifile[trackIndex][eventIndex + 1].getCommandByte());
+                        message.push_back(iMidifile[trackIndex][eventIndex + 1].getKeyNumber());
+                        message.push_back(iMidifile[trackIndex][eventIndex + 1].getVelocity());
+                        oMidifile.addEvent(trackIndex
+                            , iMidifile.getAbsoluteTickTime(adjustedBOnTime)
+                            //, iMidifile.getAbsoluteTickTime(bOffTime)
+                            , message);
+                    }
 
-                // Add another bTime OFF event for same beat
-                if (isNextSameBeat(iMidifile[trackIndex][eventIndex], iMidifile[trackIndex][eventIndex + 1])) {
+                    // Add bTime OFF event
                     message.clear();
-                    message.push_back(iMidifile[trackIndex][eventIndex + 3].getCommandByte());
-                    message.push_back(iMidifile[trackIndex][eventIndex + 3].getKeyNumber());
-                    message.push_back(iMidifile[trackIndex][eventIndex + 3].getVelocity());
+                    message.push_back(iMidifile[trackIndex][eventIndex + 1].getCommandByte());
+                    message.push_back(keyNumber);
+                    message.push_back(velocity);
+                    // If the next beat is the SAME, override the message,
+                    // the bTime OFF event should be based on the next 2nd event
+                    if (isNextSameBeat(iMidifile[trackIndex][eventIndex], iMidifile[trackIndex][eventIndex + 1])) {
+                        message.clear();
+                        message.push_back(iMidifile[trackIndex][eventIndex + 2].getCommandByte());
+                        message.push_back(iMidifile[trackIndex][eventIndex + 2].getKeyNumber());
+                        message.push_back(iMidifile[trackIndex][eventIndex + 2].getVelocity());
+                    }
                     oMidifile.addEvent(trackIndex
                         , iMidifile.getAbsoluteTickTime(adjustedBOffTime)
                         //, iMidifile.getAbsoluteTickTime(bOffTime)
                         , message);
+
+                    // Add another bTime OFF event for same beat
+                    if (isNextSameBeat(iMidifile[trackIndex][eventIndex], iMidifile[trackIndex][eventIndex + 1])) {
+                        message.clear();
+                        message.push_back(iMidifile[trackIndex][eventIndex + 3].getCommandByte());
+                        message.push_back(iMidifile[trackIndex][eventIndex + 3].getKeyNumber());
+                        message.push_back(iMidifile[trackIndex][eventIndex + 3].getVelocity());
+                        oMidifile.addEvent(trackIndex
+                            , iMidifile.getAbsoluteTickTime(adjustedBOffTime)
+                            //, iMidifile.getAbsoluteTickTime(bOffTime)
+                            , message);
+                    }
+
+                    // Cache the beat hitting time to aTime
+                    // So that the anim start just after the beat
+                    aTime = eventTime;
+                    // If the beaterCount is 1
+                    // OR the next beat is the SAME
+                    // Cache the end of anim time to aTime for next note calculation
+                    if (beaterCount == 1
+                        || isNextSameBeat(iMidifile[trackIndex][eventIndex], iMidifile[trackIndex][eventIndex + 1])
+                        ) {
+                        aTime = eventTime + allowedAfterHitAnimDT;
+                    }
                 }
-                
-                // Cache the beat hitting time to aTime
-                // So that the anim start just after the beat
-                aTime = eventTime;
-                // If the beaterCount is 1
-                // OR the next beat is the SAME
-                // Cache the end of anim time to aTime for next note calculation
-                if (beaterCount == 1 
-                    || isNextSameBeat(iMidifile[trackIndex][eventIndex], iMidifile[trackIndex][eventIndex + 1])
-                    ) {                    
-                    aTime = eventTime + allowedAfterHitAnimDT;
-                }                               
-            }
-            
+            }            
         }        
     }
 
