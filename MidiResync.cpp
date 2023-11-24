@@ -131,6 +131,9 @@ int main(int argc, char** argv) {
         float afterHitAnimDT = maxAnimTimeLength - beforeHitAnimDT;
         // Comparing before hit anim delta time and after hit anim delta time
         float animTimeLengthRatio = beforeHitAnimDT / afterHitAnimDT;
+        // The note ON event of each key number from each track
+        vector<MidiEvent> noteOnEvents;
+        noteOnEvents.assign(iMidifile[trackIndex].getEventCount(), NULL);
 
         float aTime = 0.0;
         float bOnTime = 0.0;
@@ -178,14 +181,42 @@ int main(int argc, char** argv) {
                 continue;
             }
 
-            // If TrackType::Beater0 means the track is other than beat track. Eg. Character Anim, Lighting, etc.
+            // If TrackType::Beater0 means the track is NOT a beat track. Eg. Character Anim.
             // So, copy and paste the track and break the event loop
             if (trackType == ETrackType::Beater0) {
                 oMidifile[trackIndex] = iMidifile[trackIndex];
                 break;
             }
+            // If TrackType::Beater0DTEarly means the track is NOT a beat track and all notes should HAVE earlier offset delta tick. Eg. Lighting, Camera, etc.
             else if (trackType == ETrackType::Beater0DTEarly) {
+                int keyNumber = iMidifile[trackIndex][eventIndex].getKeyNumber();
 
+                if (iMidifile[trackIndex][eventIndex].isNoteOn()) {
+                    noteOnEvents[keyNumber] = iMidifile[trackIndex][eventIndex];
+                }
+                if (iMidifile[trackIndex][eventIndex].isNoteOff()) {
+                    MidiEvent noteOnEvent = noteOnEvents[keyNumber];
+                    MidiEvent noteOffEvent = iMidifile[trackIndex][eventIndex];
+                    int deltaTick = noteOffEvent.tick - noteOnEvent.tick;
+                    int adjustOnTick = noteOnEvent.tick - deltaTick;
+                    int adjustOffTick = adjustOnTick + deltaTick;
+
+                    vector<uchar> message;
+                    message.push_back(noteOnEvent.getCommandByte());
+                    message.push_back(noteOnEvent.getKeyNumber());
+                    message.push_back(noteOnEvent.getVelocity());
+                    oMidifile.addEvent(trackIndex
+                        , adjustOnTick
+                        , message);
+
+                    message.clear();
+                    message.push_back(noteOffEvent.getCommandByte());
+                    message.push_back(noteOffEvent.getKeyNumber());
+                    message.push_back(noteOffEvent.getVelocity());
+                    oMidifile.addEvent(trackIndex
+                        , adjustOffTick
+                        , message);
+                }
             }
             else if (trackType == ETrackType::Beater2 || trackType == ETrackType::Beater1) {
                 if (iMidifile[trackIndex][eventIndex].isNoteOn()) {
@@ -379,7 +410,6 @@ int main(int argc, char** argv) {
 
 // SAME BEAT means there are 2 notes start at the same time. Eg. key 60 and 61 start from 1.0s.
 
-// A Beat Key means it's not a beat, could be a signature key or others.
 bool isBeatKey(MidiEvent beatEvent) {
     return beatEvent.getKeyNumber() >= MIN_BEAT_KEY_NUMBER;
 }
