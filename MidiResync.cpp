@@ -33,7 +33,8 @@ string iMidifilename = "Slipknot People Eq Shit Cover.mid";
 //string iMidifilename = "Test Drum.mid";
 //string iMidifilename = "Slipknot Psychosocial Cover.mid";
 
-void outputMIDIFile();
+void outputInputMIDIFile();
+void outputResyncMIDIFile();
 void outputLog();
 void outputLogFile();
 bool isBeatKey(MidiEvent beatEvent);
@@ -414,7 +415,7 @@ int main(int argc, char** argv) {
     oMidifile.sortTracks();
 
     //outputLog();
-    outputMIDIFile();
+    outputResyncMIDIFile();
     
     /*cout << "Output log file." << endl;
     outputLogFile();*/
@@ -442,10 +443,15 @@ bool isNextSameBeat(MidiEvent beatEvent, MidiEvent nextBeatEvent) {
         && beatEvent.seconds <= (nextBeatEvent.seconds + sameBeatMarginTime);
 }
 
-void outputMIDIFile() {
+void outputInputMIDIFile() {
+    iMidifile.write(iMidifilename);
+    cout << "Saved INPUT MIDI file: " << iMidifilename << endl;
+}
+
+void outputResyncMIDIFile() {
     string oMidifilename = iMidifilename.substr(0, iMidifilename.find('.')) + " Resync.mid";
     oMidifile.write(oMidifilename);
-    cout << "Saved new file: " << oMidifilename << endl;
+    cout << "Saved RESYNC MIDI file: " << oMidifilename << endl;
 }
 
 void outputLog() {
