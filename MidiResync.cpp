@@ -26,9 +26,10 @@ enum class ETrackType
     , Beater1
     , Beater0
     , Beater0DTEarly
+    , BeaterNone
 };
 
-string iMidifilename = "QOTSA No One Knows Cover.mid";
+string iMidifilename = "Slipknot People Eq Shit Cover.mid";
 //string iMidifilename = "Test Drum.mid";
 //string iMidifilename = "Slipknot Psychosocial Cover.mid";
 
@@ -118,11 +119,13 @@ int main(int argc, char** argv) {
             maxAnimTimeLengths[trackIndex] = 1.0;
             beforeHitAnimDTs[trackIndex] = 0.367;
         }
-                
+            
+        // The output track index
+        int oTrackIndex = 0;
         // The type of a track
-        ETrackType trackType = ETrackType::Beater1;
+        ETrackType trackType = ETrackType::BeaterNone;
         // Number of beater uses for hitting the drum
-        int beaterCount = 1;
+        int beaterCount = 0;
         // The maximum animation time for one beat
         float maxAnimTimeLength = maxAnimTimeLengths[trackIndex];
         // The animation delta time between the start and the beat
@@ -162,7 +165,13 @@ int main(int argc, char** argv) {
                     cout << "Track: " << trackIndex;
                     cout << " (" << content << ")" << endl;
 
+                    size_t MIDIPos = content.find('MIDI');
                     size_t beaterCountSeperatorPos = content.find(':');
+                    if (MIDIPos != string::npos) {
+                        beaterCount = 1;
+                        trackType = ETrackType::Beater1;
+                    }
+
                     if (beaterCountSeperatorPos != string::npos) {
                         string trackCode = content.substr(0, beaterCountSeperatorPos);
                         beaterCount = stoi(trackCode.substr(0, 1));
@@ -175,6 +184,11 @@ int main(int argc, char** argv) {
                         else if (trackCode == "0a") {
                             trackType = ETrackType::Beater0DTEarly;
                         }
+                    }
+
+                    // If the track is a total none related track, break it
+                    if (trackType == ETrackType::BeaterNone) {
+                        break;
                     }
                 }
                 oMidifile.addEvent(iMidifile[trackIndex][eventIndex]);
@@ -394,7 +408,7 @@ int main(int argc, char** argv) {
             }            
         }        
     }
-
+    
     oMidifile.doTimeAnalysis();
     oMidifile.linkNotePairs();
     oMidifile.sortTracks();
