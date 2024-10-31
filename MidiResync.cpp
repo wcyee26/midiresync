@@ -430,7 +430,7 @@ bool isBeatKey(MidiEvent beatEvent) {
 }
 
 bool isSignatureKey(MidiEvent beatEvent) {
-    return beatEvent.getKeyNumber() == 59;
+    return beatEvent.getKeyNumber() <= 59 && beatEvent.getKeyNumber() >= 50;
 }
 
 bool isPreviousSameBeat(MidiEvent beatEvent, MidiEvent prevBeatEvent) {
